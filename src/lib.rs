@@ -1,7 +1,7 @@
 mod xinterface {
+    use std::ffi::c_void;
     use x11::xlib::{XCloseDisplay, XDefaultRootWindow, XFree, XOpenDisplay};
     use x11::xss::{XScreenSaverAllocInfo, XScreenSaverQueryExtension, XScreenSaverQueryInfo};
-    use std::ffi::c_void;
 
     pub struct Display {
         display_ptr: *mut x11::xlib::Display,
@@ -24,11 +24,8 @@ mod xinterface {
             let mut event_basep: i32 = 0;
             let mut error_basep: i32 = 0;
             unsafe {
-                XScreenSaverQueryExtension(
-                    self.display_ptr,
-                    &mut event_basep,
-                    &mut error_basep
-                ) != 0
+                XScreenSaverQueryExtension(self.display_ptr, &mut event_basep, &mut error_basep)
+                    != 0
             }
         }
 
@@ -79,21 +76,32 @@ mod xinterface {
 
 use xinterface::Display;
 
-pub fn get_idle_time() -> u64 {
-    let display = Display::open().unwrap_or_else(|_| {
-        println!("Cannot open display");
-        std::process::exit(1);
-    });
+pub enum Error {
+    CannotOpenDisplay,
+    NoScreenSaverExtension,
+    CannotGetScreenSaverinfo,
+}
+
+impl Error {
+    pub fn message(&self) -> &'static str {
+        match self {
+            Self::CannotOpenDisplay => "Cannot open display",
+            Self::NoScreenSaverExtension => "Screen doesn't have screen saver extension",
+            Self::CannotGetScreenSaverinfo => "Cannot get screen saver info",
+        }
+    }
+}
+
+pub fn get_idle_time() -> Result<u64, Error> {
+    let display = Display::open().or(Err(Error::CannotOpenDisplay))?;
 
     if !display.has_screen_saver_extesnsion() {
-        println!("Screen doesn't have screen saver extension");
-        std::process::exit(1);
+        return Err(Error::NoScreenSaverExtension);
     }
 
-    let screen_saver_info = display.get_screen_saver_info().unwrap_or_else(|_| {
-        println!("Cannot get screen saver info");
-        std::process::exit(1);
-    });
+    let screen_saver_info = display
+        .get_screen_saver_info()
+        .or(Err(Error::CannotGetScreenSaverinfo))?;
 
-    screen_saver_info.idle_time()
+    Ok(screen_saver_info.idle_time())
 }
